@@ -40,10 +40,6 @@ cat("Growth in the conversion rate accounting for impressions (logit):", 100 * (
 cat("Growth in the conversion rate due to an increase in impressions (logit):", 100 * (exp(model1b$coefficients['impressions']) - 1), "%\n")
 summary(model1b)
 # 3. Baseline conversion rate and lift
-# PLEASE CHECK IF I DID NOT MAKE ANY MISTAKES HERE
-# MY RATIONALE WAS TO CALCULATE A NUMBER OF EXTRA PURCHASES CREATED BY THE CAMPAIGN: rate.increase * nrow(data[data$test == 1, ])
-# AND THEN MULTIPLY IT BY 300 NOK
-# THEN I JUST MULTIPLIED ALL IMPREASSIONS BY COST. OR SHOULD I MULTIPLY ONLY THOSE IMPRESSIONS THAT WERE ACTUALLY SHOWED TO USERS?
 campaign.revenue <- rate.increase * nrow(data[data$test == 1, ]) * purchase.contribution
 campaign.cost <- sum(data$impressions[data$test == 1]) * marketing.cost
 campaign.profit <- campaign.revenue - campaign.cost
