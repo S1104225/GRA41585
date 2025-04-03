@@ -20,72 +20,118 @@ head(data)
 # Create a Post dummy variable to indicate the post-treatment period
 data$Post <- as.numeric(data$Weekind >= 78)
 
-
 # Create the new variable
 data$Treatment <- ifelse(data$storeNum == 109, 1, 0)
 
 # Create a separate dataset only with data for the treatment group
 data.treated <- data[data$storeNum == 109, ]
 
+data.pretreatment.treated <- data.treated %>% filter(Weekind<78)
+data.pretreatment <- data %>% filter(Weekind<78)
+
+data.posttreatment.treated <- data.treated %>% filter(Weekind>=78)
+data.posttreatment <- data %>% filter(Weekind >= 78)
+
+time_pre <- 1:78 # Pre-treatment periods
+print(time_pre)
+time_post <- 78:104  # Post-treatment periods
+print(time_post)
+
 # Plot the sales data for store 109
 ggplot(data.treated) +
-  geom_line(aes(x = Weekind, y = p1sales, color = "P1 Sales")) +
-  geom_line(aes(x = Weekind, y = p2sales, color = "P2 Sales")) +
-  geom_vline(xintercept = 78, linetype = "dotted", color = "black") + # Adding the vertical line
-  labs(x = "Observed weeks", y = "Sales", color = "Legend") +
-  theme_classic()
+    geom_line(aes(x = Weekind, y = p1sales, color = "P1 Sales")) +
+    geom_line(aes(x = Weekind, y = p2sales, color = "P2 Sales")) +
+    geom_vline(xintercept = 78, linetype = "dotted", color = "black") + # Adding the vertical line
+    labs(x = "Observed weeks", y = "Sales", color = "Legend") +
+    theme_classic()
 
 # Analysis of the models using prices and the Post variable
-model_p1 <- lm(p1sales ~ Post + p1price, data = data.treated)
-summary(model_p1)
-# For Product 1 the treatment period is significant and the price is not.
+model_p1 <- lm(p1sales ~ p1price + Weekind, data = data.pretreatment.treated)
+tab_model(model_p1)
 
-model_p2 <- lm(p2sales ~ Post + p2price, data = data.treated)
-summary(model_p2)
-# For Product 2 the treatment period is not significant and the price is.
+model_p2 <- lm(p2sales ~ p2price + Weekind, data = data.pretreatment.treated)
+tab_model(model_p2)
 
-# Including the promotion variable changes the significance of our variables
-model_p1_2 <- lm(p1sales ~ Post + p1price + p1prom, data = data.treated)
-summary(model_p1_2)
+# Get estimated coefficients for sales of Product 1
+alpha1 <- coef(model_p1)[1]  # Intercept
+beta1_price <- coef(model_p1)[2]   # Price coefficient
+beta1_trend <- coef(model_p1)[3]  # Trend coefficient (Weekind)
+print(paste("Alpha (Intercept):", round(alpha1, 2)))
+print(paste("Beta (Trend):", round(beta1_trend, 2)))
+predicted_p1sales <- alpha1 + beta1_price * data.posttreatment.treated$p1price + beta1_trend * data.posttreatment.treated$Weekind
+print(predicted_p1sales)
 
-model_p2_2 <- lm(p2sales ~ Post + p2price + p2prom, data = data.treated)
-summary(model_p2_2)
-# For both products all variables become significant
+atet1 <- data.posttreatment.treated$p1sales - predicted_p1sales
+print(atet1)
+average_atet1 <- mean(atet1)
+print(paste("Average ATET for Product 1:", round(average_atet1, 2)))
+
+# Actual vs. predicted sales for Product 1 plot
+ggplot() +
+    geom_line(data = data.treated, aes(x = Weekind, y = p1sales, color = "Actual Sales"), size = 1) +
+    geom_line(data = data.posttreatment.treated, aes(x = Weekind, y = predicted_p1sales, color = "Predicted Sales"), linetype = "dashed", size = 1) +
+    geom_vline(xintercept = 78, linetype = "dotted", color = "black") +  # Vertical line for treatment start
+    labs(x = "Week",
+         y = "Sales",
+         color = "Legend") +
+    theme_minimal()
+
+# Get estimated coefficients for sales of Product 2
+alpha2 <- coef(model_p2)[1]  # Intercept
+beta2_price <- coef(model_p2)[2]   # Price coefficient
+beta2_trend <- coef(model_p2)[3]  # Trend coefficient (Weekind)
+print(paste("Alpha (Intercept):", round(alpha2, 2)))
+print(paste("Beta (Trend):", round(beta2_trend, 2)))
+predicted_p2sales <- alpha2 + beta2_price * data.posttreatment.treated$p2price + beta2_trend * data.posttreatment.treated$Weekind
+print(predicted_p2sales)
+
+atet2 <- data.posttreatment.treated$p2sales - predicted_p2sales
+print(atet2)
+average_atet2 <- mean(atet2)
+print(paste("Average ATET for Product 2:", round(average_atet2, 2)))
+
+# Actual vs. predicted sales for Product 2 plot
+ggplot() +
+    geom_line(data = data.treated, aes(x = Weekind, y = p2sales, color = "Actual Sales"), size = 1) +
+    geom_line(data = data.posttreatment.treated, aes(x = Weekind, y = predicted_p2sales, color = "Predicted Sales"), linetype = "dashed", size = 1) +
+    geom_vline(xintercept = 78, linetype = "dotted", color = "black") +  # Vertical line for treatment start
+    labs(x = "Week",
+         y = "Sales",
+         color = "Legend") +
+    theme_minimal()
+
 
 # DIFFERENCE IN DIFFERENCE
 
 # Create a separate dataset only with data for the control group
 data.control <- data[data$storeNum != 109, ]
+data.pretreatment.control <- data.control %>% filter(Weekind<78)
+data.posttreatment.control <- data.control %>% filter(Weekind>=78)
 
 # Compute average prices over time for store 109
 avg_store_109 <- data.treated %>%
-  group_by(Weekind) %>%
-  summarize(mean_p1sales = mean(p1sales, na.rm = TRUE),
-            mean_p2sales = mean(p2sales, na.rm = TRUE))
+    group_by(Weekind) %>%
+    summarize(mean_p1sales = mean(p1sales, na.rm = TRUE),
+              mean_p2sales = mean(p2sales, na.rm = TRUE))
 
 # Compute average prices over time for all other stores
 avg_not_store_109 <- data.control %>%
-  group_by(Weekind) %>%
-  summarize(mean_p1sales = mean(p1sales, na.rm = TRUE),
-            mean_p2sales = mean(p2sales, na.rm = TRUE))
+    group_by(Weekind) %>%
+    summarize(mean_p1sales = mean(p1sales, na.rm = TRUE),
+              mean_p2sales = mean(p2sales, na.rm = TRUE))
 
 ggplot() +
-  geom_line(data = avg_store_109, aes(x = Weekind, y = mean_p1sales, color = "Store 109 - p1sales")) +
-  geom_line(data = avg_store_109, aes(x = Weekind, y = mean_p2sales, color = "Store 109 - p2sales")) +
-  geom_line(data = avg_not_store_109, aes(x = Weekind, y = mean_p1sales, color = "Other Stores - p1sales"), linetype = "dashed") +
-  geom_line(data = avg_not_store_109, aes(x = Weekind, y = mean_p2sales, color = "Other Stores - p2sales"), linetype = "dashed") +
-  geom_vline(xintercept = 78, linetype = "dotted", color = "black") + # Adding the vertical line
-  labs(title = "Average Sales Over Time",
-       x = "Week",
-       y = "Average Sales",
-       color = "Legend") +
-  theme_minimal()
+    geom_line(data = avg_store_109, aes(x = Weekind, y = mean_p1sales, color = "Treated store - Product 1 sales")) +
+    geom_line(data = avg_store_109, aes(x = Weekind, y = mean_p2sales, color = "Treated store - Product 2 sales")) +
+    geom_line(data = avg_not_store_109, aes(x = Weekind, y = mean_p1sales, color = "Untreated stores - Product 1 sales"), linetype = "dashed") +
+    geom_line(data = avg_not_store_109, aes(x = Weekind, y = mean_p2sales, color = "Untreated stores - Product 2 sales"), linetype = "dashed") +
+    geom_vline(xintercept = 78, linetype = "dotted", color = "black") + # Adding the vertical line
+    labs(x = "Week",
+         y = "Average Sales",
+         color = "Legend") +
+    theme_minimal()
 
 # Test for parallel trends
-
-data.pretreatment.treated <- data.treated %>% filter(Weekind<78)
-data.pretreatment.control <- data.control %>% filter(Weekind<78)
-data.pretreatment <- data %>% filter(Weekind<78)
 
 # Run a linear regression on the pre-treatment data only
 # Start with sales for the first product
@@ -114,16 +160,15 @@ tab_model(model2c, show.se = TRUE)
 # Estimate the ATET (average treatment effect on the treated) in the diff-in-diff framework
 
 # Run a linear regression on the data to estimate the treatment effect
-model3a <- lm(p1sales ~ Treatment + Post + Treatment*Post, data = data)
+model3a <- lm(p1sales ~ Treatment * Post + p1price + p1prom + compind + storesize + citysize + Weekind, data = data)
 tab_model(model3a, show.se = TRUE)
-# ATET1 = 43.55, p = 0.007
-# Interpretation: the marketing strategy showed an increase of 43.55 in sales of the first product.
+# ATET1 = 42.07, p < 0.001
+# Interpretation: the marketing strategy showed an increase of 42.07 in sales of the first product.
 
-model3b <- lm(p2sales ~ Treatment + Post + Treatment*Post, data = data)
+model3b <- lm(p2sales ~ Treatment * Post + p2price + p2prom + compind + storesize + citysize + Weekind, data = data)
 tab_model(model3b, show.se = TRUE)
-# ATET2 = -6.86, p = 0.758
-# Interpretation: the marketing strategy showed an insignificant difference in sales of the second product.
-
+# ATET2 = -15.13, p < 0.001
+# Interpretation: the marketing strategy showed a decrease of 15.13 in sales of the second product.
 
 # SYNTHETIC CONTROL
 # P1
